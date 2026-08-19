@@ -1,0 +1,46 @@
+name: RKE2 path resolver validation
+
+on:
+  pull_request:
+    branches:
+      - agent/resolve-rke2-worker-paths-ci-base
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: focused-and-unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout pull request merge
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Install test dependency with retries
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -o Acquire::Retries=5
+          sudo apt-get install -y -o Acquire::Retries=5 libpcre3-dev
+
+      - name: Validate resolver shell syntax
+        run: |
+          bash -n agent/nvbench/utils/utils.sh
+          sh -n agent/nvbench/utils/utils.sh
+
+      - name: Verify RKE2 resolver integration
+        run: |
+          yaml=agent/nvbench/kubernetes-cis-benchmark/cis-rke2-1.8.0/worker/4_worker_nodes.yaml
+          test "$(grep -c 'resolve_argument_path' "$yaml")" -eq 7
+          test "$(grep -Ec '^[[:space:]]+file="/var/lib/rancher/rke2/' "$yaml" || true)" -eq 0
+
+      - name: Run repository unit tests
+        run: make test
