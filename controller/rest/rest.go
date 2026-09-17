@@ -1565,7 +1565,7 @@ func PreInitContext(ctx *Context) {
 	evqueue = ctx.EvQueue
 	auditQueue = ctx.AuditQueue
 
-	remoteAuther = auth.NewRemoteAuther(nil)
+	remoteAuther = auth.NewRemoteAuther(nil, common.AesGcmEncrypt, common.AesGcmDecrypt)
 	clusHelper = kv.GetClusterHelper()
 	cfgHelper = kv.GetConfigHelper()
 }
@@ -2019,9 +2019,8 @@ func StartRESTServer(isNewCluster, isLead bool, maxConcurrentRepoScanTasks, scan
 
 	addr := fmt.Sprintf(":%d", _restPort)
 	config := &tls.Config{
-		MinVersion:               tls.VersionTLS13,
-		PreferServerCipherSuites: true,
-		CipherSuites:             utils.GetSupportedTLSCipherSuites(),
+		MinVersion:   tls.VersionTLS13,
+		CipherSuites: utils.GetSupportedTLSCipherSuites(),
 	}
 
 	// tlsCertificate is only generated when default location has no files

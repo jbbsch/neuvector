@@ -56,10 +56,9 @@ groups:
           GDPR: []
         audit: |
           check="$id  - $description"
-          file="/var/lib/rancher/rke2/agent/kubeproxy.kubeconfig"
-          file=$(append_prefix "$CONFIG_PREFIX" "$file")
-          if [ -e "$file" ]; then
-            permissions=$(stat -c %a $file)
+          file=$(resolve_argument_path "$CIS_PROXY_CMD" '--kubeconfig')
+          if [ -n "$file" ] && [ -e "$file" ]; then
+            permissions=$(stat -c %a "$file")
             if [ "$permissions" -le 600 ]; then
               pass "$check"
             else
@@ -86,8 +85,9 @@ groups:
           GDPR: []
         audit: |
           check="$id  - $description"
-          if [ -e "$file" ]; then
-            ownership=$(stat -c %u%g $file)
+          file=$(resolve_argument_path "$CIS_PROXY_CMD" '--kubeconfig')
+          if [ -n "$file" ] && [ -e "$file" ]; then
+            ownership=$(stat -c %u%g "$file")
             if [ "$ownership" = "00" ]; then
               pass "$check"
             else
@@ -114,11 +114,10 @@ groups:
           GDPR: []
         audit: |
           check="$id  - $description"
-          file="/var/lib/rancher/rke2/agent/kubelet.kubeconfig"
-          file=$(append_prefix "$CONFIG_PREFIX" "$file")
+          file=$(resolve_argument_path "$CIS_KUBELET_CMD" '--kubeconfig')
 
-          if [ -e "$file" ]; then
-            permissions=$(stat -c %a $file)
+          if [ -n "$file" ] && [ -e "$file" ]; then
+            permissions=$(stat -c %a "$file")
             if [ "$permissions" -le 600 ]; then
               pass "$check"
             else
@@ -145,8 +144,9 @@ groups:
           GDPR: []
         audit: |
           check="$id  - $description"
-          if [ -e "$file" ]; then
-            ownership=$(stat -c %u%g $file)
+          file=$(resolve_argument_path "$CIS_KUBELET_CMD" '--kubeconfig')
+          if [ -n "$file" ] && [ -e "$file" ]; then
+            ownership=$(stat -c %u%g "$file")
             if [ "$ownership" = "00" ]; then
               pass "$check"
             else
@@ -173,10 +173,9 @@ groups:
           GDPR: []
         audit: |
           check="$id  - $description"
-          file="/var/lib/rancher/rke2/agent/client-ca.crt"
-          file=$(append_prefix "$CONFIG_PREFIX" "$file")
-          if [ -e "$file" ]; then
-            permissions=$(stat -c %a $file)
+          file=$(resolve_argument_path "$CIS_KUBELET_CMD" '--client-ca-file')
+          if [ -n "$file" ] && [ -e "$file" ]; then
+            permissions=$(stat -c %a "$file")
             if [ "$permissions" -le 600 ]; then
               pass "$check"
               pass "      * client-ca-file: $file"
@@ -204,10 +203,9 @@ groups:
           GDPR: []
         audit: |
           check="$id  - $description"
-          file="/var/lib/rancher/rke2/agent/client-ca.crt"
-          file=$(append_prefix "$CONFIG_PREFIX" "$file")
-          if [ -e "$file" ]; then
-            ownership=$(stat -c %u%g $file)
+          file=$(resolve_argument_path "$CIS_KUBELET_CMD" '--client-ca-file')
+          if [ -n "$file" ] && [ -e "$file" ]; then
+            ownership=$(stat -c %u%g "$file")
             if [ "$ownership" = "00" ]; then
               pass "$check"
               pass "      * client-ca-file: $file"
@@ -444,17 +442,22 @@ groups:
         tags: {}
         audit: |
           check="$id  - $description"
+
+          config_dir="/var/lib/rancher/rke2/agent/etc/kubelet.conf.d"
+          config_dir=$(append_prefix "$CONFIG_PREFIX" "$config_dir")
+          qps=$(sed -n \
+              's/^[[:space:]]*eventRecordQPS:[[:space:]]*\([0-9][0-9]*\).*$/\1/p' \
+              "$config_dir"/*.conf 2>/dev/null | tail -n 1)
+
           if check_argument "$CIS_KUBELET_CMD" '--event-qps' >/dev/null 2>&1; then
               qps=$(get_argument_value "$CIS_KUBELET_CMD" '--event-qps' | cut -d " " -f 1)
-              if [ "$qps" -gt 0 ]; then
-                  pass "$check"
-              else
-                  warn "$check"
-                  warn "      * --event-qps: $qps is not set to a positive value"
-              fi
+          fi
+
+          if [ -n "$qps" ] && [ "$qps" -gt 0 ]; then
+              pass "$check"
           else
               warn "$check"
-              warn "      * --event-qps is not set"
+              warn "      * eventRecordQPS: ${qps:-not set} is not set to a positive value"
           fi
         remediation: |
           Edit the RKE2 config file /etc/rancher/rke2/config.yaml, set the following parameter to an appropriate value.
@@ -536,14 +539,18 @@ groups:
           GDPR: []
         audit: |
           check="$id  - $description"
-          file="/var/lib/rancher/rke2/agent/kubelet.kubeconfig"
-          file=$(append_prefix "$CONFIG_PREFIX" "$file")
-          found=$(sed -rn '/--feature-gates=RotateKubeletServerCertificate=false/p' $file)
-          if [ "$found" ]; then
-              warn "$check"
-              warn "      * RotateKubeletServerCertificate should be: true, but is: false"
+          file=$(resolve_argument_path "$CIS_KUBELET_CMD" '--kubeconfig')
+          if [ -n "$file" ] && [ -e "$file" ]; then
+              found=$(sed -rn '/--feature-gates=RotateKubeletServerCertificate=false/p' "$file")
+              if [ "$found" ]; then
+                  warn "$check"
+                  warn "      * RotateKubeletServerCertificate should be: true, but is: false"
+              else
+                  pass "$check"
+              fi
           else
-              pass "$check"
+              warn "$check"
+              warn "      * kubeconfig file not found, $file"
           fi
         remediation: |
           By default, RKE2 does not set the RotateKubeletServerCertificate feature gate.
